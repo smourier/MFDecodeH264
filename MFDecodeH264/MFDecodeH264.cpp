@@ -4,7 +4,6 @@
 #include <mferror.h>
 #include <mfidl.h>
 #include <mftransform.h>
-#include <tuple>
 #include <cstdlib>
 
 #pragma comment(lib, "mfplat.lib")
@@ -78,17 +77,22 @@ int main()
 			WIN32CHECK(ReadFile(file, chunk, chunkSize, &read, nullptr));
 			HRCHECK(inputBuffer->SetCurrentLength(read));
 			HRCHECK(inputBuffer->Unlock());
-			if (!read)
-				break; // end of file
-
-			CComPtr<IMFSample> inputSample;
-			HRCHECK(MFCreateSample(&inputSample));
-			HRCHECK(inputSample->AddBuffer(inputBuffer));
-
-			auto hr = decoder->ProcessInput(0, inputSample, 0);
-			if (hr != MF_E_NOTACCEPTING) // just go on
+			if (read)
 			{
-				HRCHECK(hr);
+				CComPtr<IMFSample> inputSample;
+				HRCHECK(MFCreateSample(&inputSample));
+				HRCHECK(inputSample->AddBuffer(inputBuffer));
+
+				auto hr = decoder->ProcessInput(0, inputSample, 0);
+				if (hr != MF_E_NOTACCEPTING) // just go on
+				{
+					HRCHECK(hr);
+				}
+			}
+			else
+			{
+				// end of file, ask decoder to processes all data from previous calls
+				HRCHECK(decoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0));
 			}
 
 			CComPtr<IMFSample> outputSample;
@@ -104,9 +108,14 @@ int main()
 			}
 
 			DWORD status = 0;
-			hr = decoder->ProcessOutput(0, 1, &outputBuffer, &status);
+			auto hr = decoder->ProcessOutput(0, 1, &outputBuffer, &status);
 			if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) // just go on
+			{
+				if (!read) // file is all read
+					break;
+
 				continue;
+			}
 
 			// https://learn.microsoft.com/en-us/windows/win32/medfound/handling-stream-changes
 			if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
