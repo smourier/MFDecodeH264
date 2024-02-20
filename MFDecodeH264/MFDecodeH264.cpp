@@ -91,7 +91,7 @@ int main()
 			}
 			else
 			{
-				// end of file, ask decoder to processes all data from previous calls
+				// end of file, ask decoder to process all data from previous calls
 				HRCHECK(decoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0));
 			}
 
@@ -102,10 +102,11 @@ int main()
 
 			if (sampleSize)
 			{
+				// now we know the size so we can (and must) allocate the MF output buffer
 				CComPtr<IMFMediaBuffer> outputBuffer;
 				HRCHECK(MFCreateMemoryBuffer(sampleSize, &outputBuffer));
 				HRCHECK(outputSample->AddBuffer(outputBuffer));
-			}
+			} // else just continue to process
 
 			DWORD status = 0;
 			auto hr = decoder->ProcessOutput(0, 1, &outputBuffer, &status);
@@ -120,13 +121,13 @@ int main()
 			// https://learn.microsoft.com/en-us/windows/win32/medfound/handling-stream-changes
 			if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
 			{
+				// get (and set) NV12 output type (could be I420, IYUV, YUY2, YV12)
+				HRCHECK(SetOutputType(decoder, MFVideoFormat_NV12));
+
 				// now get the sample size
 				CComPtr<IMFMediaType> type;
 				HRCHECK(decoder->GetOutputCurrentType(0, &type));
 				HRCHECK(type->GetUINT32(MF_MT_SAMPLE_SIZE, &sampleSize));
-
-				// get (and set) NV12 output type (could be I420, IYUV, YUY2, YV12)
-				HRCHECK(SetOutputType(decoder, MFVideoFormat_NV12));
 				continue;
 			}
 			HRCHECK(hr);
