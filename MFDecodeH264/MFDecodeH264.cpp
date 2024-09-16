@@ -555,6 +555,8 @@ int main()
             notAccept;
         } while (true);
 
+        wprintf(L"Total cound %d\n", c);
+
         // close file
         CloseHandle(file);
         HRCHECK(MFShutdown());
