@@ -15,6 +15,7 @@
 #include <strsafe.h>
 #include <cstdlib>
 
+#include <winrt\base.h>
 
 #pragma comment(lib, "mfplat.lib")
 #pragma comment(lib, "mfuuid.lib")
@@ -22,20 +23,20 @@
 #define HRCHECK(__expr) {auto __hr=(__expr);if(FAILED(__hr)){wprintf(L"FAILURE 0x%08X (%i)\n\tline: %u file: '%s'\n\texpr: '" _CRT_WIDE(#__expr) L"'\n",__hr,__hr,__LINE__,_CRT_WIDE(__FILE__));_CrtDbgBreak();}}
 #define WIN32CHECK(__expr) {if(!(__expr)){auto __hr=HRESULT_FROM_WIN32(GetLastError());{wprintf(L"FAILURE 0x%08X (%i)\n\tline: %u file: '%s'\n\texpr: '" _CRT_WIDE(#__expr) L"'\n",__hr,__hr,__LINE__,_CRT_WIDE(__FILE__));_CrtDbgBreak();}}}
 
-static HRESULT SetOutputType(IMFTransform* transform, GUID format)
+static HRESULT SetOutputType(winrt::com_ptr<IMFTransform> const& transform, GUID format)
 {
 	DWORD index = 0;
 	do
 	{
-		CComPtr<IMFMediaType> outputType;        
-		auto hr = transform->GetOutputAvailableType(0, index++, &outputType);
+		winrt::com_ptr<IMFMediaType> outputType;        
+		auto hr = transform->GetOutputAvailableType(0, index++, outputType.put());
 		if (FAILED(hr))
 			return hr;
 
 		GUID guid;
 		if (SUCCEEDED(outputType->GetGUID(MF_MT_SUBTYPE, &guid)) && guid == format)
 		{
-			HRCHECK(transform->SetOutputType(0, outputType, 0));
+			HRCHECK(transform->SetOutputType(0, outputType.get(), 0));
 			return S_OK;
 		}
 	} while (true);
@@ -439,8 +440,8 @@ int main()
     
 
         // create H264 transform https://learn.microsoft.com/en-us/windows/win32/medfound/h-264-video-decoder
-        CComPtr<IMFTransform> decoder;
-        HRCHECK(decoder.CoCreateInstance(CLSID_MSH264DecoderMFT));
+        winrt::com_ptr<IMFTransform> decoder;
+        HRCHECK(CoCreateInstance(CLSID_MSH264DecoderMFT, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(decoder.put())));
 
         // You can check in decoder attributes that MF_MT_FIXED_SIZE_SAMPLES is set to TRUE.
         // Calling GetOutputStreamInfo this will tell you the MFT cannot provide samples
@@ -452,14 +453,14 @@ int main()
         UINT32 sampleSize = 0;
 
         // input type is H264
-        CComPtr<IMFMediaType> inputType;
-        HRCHECK(MFCreateMediaType(&inputType));
+        winrt::com_ptr<IMFMediaType> inputType;
+        HRCHECK(MFCreateMediaType(inputType.put()));
         HRCHECK(inputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video));
         HRCHECK(inputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264));
         HRCHECK(inputType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE));
         HRCHECK(inputType->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES, TRUE));
 
-        HRCHECK(decoder->SetInputType(0, inputType, 0)); // video is id 0
+        HRCHECK(decoder->SetInputType(0, inputType.get(), 0)); // video is id 0
         // get (and set) NV12 output type (could be I420, IYUV, YUY2, YV12)
         HRCHECK(SetOutputType(decoder, MFVideoFormat_NV12));    
         int notAccept = 0;
@@ -471,8 +472,8 @@ int main()
             DWORD chunkSize = 500 + (1000 * (RAND_MAX - std::rand())) / RAND_MAX;
 
             // create an MF input buffer & read into it
-            CComPtr<IMFMediaBuffer> inputBuffer;
-            HRCHECK(MFCreateMemoryBuffer(chunkSize, &inputBuffer));
+            winrt::com_ptr<IMFMediaBuffer> inputBuffer;
+            HRCHECK(MFCreateMemoryBuffer(chunkSize, inputBuffer.put()));
             BYTE* chunk;
             HRCHECK(inputBuffer->Lock(&chunk, nullptr, nullptr));
             DWORD read;
@@ -481,11 +482,11 @@ int main()
             HRCHECK(inputBuffer->Unlock());
             if (read)
             {
-                CComPtr<IMFSample> inputSample;
-                HRCHECK(MFCreateSample(&inputSample));
-                HRCHECK(inputSample->AddBuffer(inputBuffer));
+                winrt::com_ptr<IMFSample> inputSample;
+                HRCHECK(MFCreateSample(inputSample.put()));
+                HRCHECK(inputSample->AddBuffer(inputBuffer.get()));
 
-                auto hr = decoder->ProcessInput(0, inputSample, 0);
+                auto hr = decoder->ProcessInput(0, inputSample.get(), 0);
                 if (hr != MF_E_NOTACCEPTING) // just go on
                 {
                     HRCHECK(hr);
@@ -502,17 +503,17 @@ int main()
                 HRCHECK(decoder->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0));
             }
 
-            CComPtr<IMFSample> outputSample;
-            HRCHECK(MFCreateSample(&outputSample));
+            winrt::com_ptr<IMFSample> outputSample;
+            HRCHECK(MFCreateSample(outputSample.put()));
             MFT_OUTPUT_DATA_BUFFER outputBuffer{};
-            outputBuffer.pSample = outputSample;
+            outputBuffer.pSample = outputSample.get();
 
             if (sampleSize)
             {
                 // now we know the size so we can (and must) allocate the MF output buffer
-                CComPtr<IMFMediaBuffer> outputBuffer;
-                HRCHECK(MFCreateMemoryBuffer(sampleSize, &outputBuffer));
-                HRCHECK(outputSample->AddBuffer(outputBuffer));
+                winrt::com_ptr<IMFMediaBuffer> outputBuffer;
+                HRCHECK(MFCreateMemoryBuffer(sampleSize, outputBuffer.put()));
+                HRCHECK(outputSample->AddBuffer(outputBuffer.get()));
             } // else just continue to process
 
             DWORD status = 0;
@@ -539,8 +540,8 @@ int main()
                 HRESULT hrtemp = decoder->GetOutputStreamInfo(0, &output_stream_info);
                 bool test = StreamAllocatesMemory(output_stream_info.dwFlags);
                 // now get the sample size
-                CComPtr<IMFMediaType> type;
-                HRCHECK(decoder->GetOutputCurrentType(0, &type));
+                winrt::com_ptr<IMFMediaType> type;
+                HRCHECK(decoder->GetOutputCurrentType(0, type.put()));
                 HRCHECK(type->GetUINT32(MF_MT_SAMPLE_SIZE, &sampleSize));
                 continue;
             }
