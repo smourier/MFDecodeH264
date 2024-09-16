@@ -1,8 +1,8 @@
 #ifdef _WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 #endif
+
 #include <windows.h>
-//#include <atlbase.h>
 #include <mfapi.h>
 #include <mferror.h>
 #include <mfidl.h>
@@ -41,6 +41,7 @@ static HRESULT SetOutputType(winrt::com_ptr<IMFTransform> const& transform, GUID
 		}
 	} while (true);
 }
+
 #define H264_INBUF_SIZE 5000                                                           /* number of bytes we read per chunk */
 #define FF_INPUT_BUFFER_PADDING_SIZE 16
 
@@ -421,13 +422,10 @@ LPCWSTR GetGUIDNameConst(const GUID& guid)
     return NULL;
 }
 
-bool StreamAllocatesMemory(DWORD out_stream_flags) {
-    static const DWORD kFlagAutoAllocateMemory =
-        MFT_OUTPUT_STREAM_PROVIDES_SAMPLES |
-        MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES;
-    const bool output_stream_allocates_memory =
-        (out_stream_flags & kFlagAutoAllocateMemory) != 0;
-    return output_stream_allocates_memory;
+bool StreamAllocatesMemory(DWORD out_stream_flags)
+{
+    static const DWORD kFlagAutoAllocateMemory = MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES;
+    const bool output_stream_allocates_memory = (out_stream_flags & kFlagAutoAllocateMemory) != 0; return output_stream_allocates_memory;
 }
 
 int main()
@@ -435,9 +433,9 @@ int main()
     HRCHECK(CoInitialize(nullptr));
     {
         HRCHECK(MFStartup(MF_VERSION));
+        
         // open file
-        int c = 0;
-    
+        auto c = 0;
 
         // create H264 transform https://learn.microsoft.com/en-us/windows/win32/medfound/h-264-video-decoder
         winrt::com_ptr<IMFTransform> decoder;
@@ -463,7 +461,7 @@ int main()
         HRCHECK(decoder->SetInputType(0, inputType.get(), 0)); // video is id 0
         // get (and set) NV12 output type (could be I420, IYUV, YUY2, YV12)
         HRCHECK(SetOutputType(decoder, MFVideoFormat_NV12));    
-        int notAccept = 0;
+        auto notAccept = 0;
         auto file = CreateFile(L"h264.h264", GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
         WIN32CHECK(file != INVALID_HANDLE_VALUE);
         do
@@ -519,9 +517,7 @@ int main()
             DWORD status = 0;
             auto hr = decoder->ProcessOutput(0, 1, &outputBuffer, &status);
             MFT_OUTPUT_STREAM_INFO output_stream_info;
-            HRESULT hrtemp = decoder->GetOutputStreamInfo(0, &output_stream_info);
-
-    
+            auto hrtemp = decoder->GetOutputStreamInfo(0, &output_stream_info);
 
             if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) // just go on
             {
@@ -530,15 +526,14 @@ int main()
 
                 continue;
             }
-            
 
             // https://learn.microsoft.com/en-us/windows/win32/medfound/handling-stream-changes
             if (hr == MF_E_TRANSFORM_STREAM_CHANGE)
             {
                 // get (and set) NV12 output type (could be I420, IYUV, YUY2, YV12)
                 HRCHECK(SetOutputType(decoder, MFVideoFormat_NV12));
-                HRESULT hrtemp = decoder->GetOutputStreamInfo(0, &output_stream_info);
-                bool test = StreamAllocatesMemory(output_stream_info.dwFlags);
+                auto hrtemp = decoder->GetOutputStreamInfo(0, &output_stream_info);
+                auto test = StreamAllocatesMemory(output_stream_info.dwFlags);
                 // now get the sample size
                 winrt::com_ptr<IMFMediaType> type;
                 HRCHECK(decoder->GetOutputCurrentType(0, type.put()));
